@@ -40,6 +40,8 @@ def init_db():
                 stage           TEXT,
                 venue           TEXT
             );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_unique
+                ON matches(date, home_team_id, away_team_id);
                            
             CREATE TABLE IF NOT EXISTS match_stats (
                 stat_id         INTEGER PRIMARY KEY,
