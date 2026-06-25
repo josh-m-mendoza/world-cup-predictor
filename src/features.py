@@ -75,14 +75,81 @@ def rolling_form(team_id: int, before_date: str, n: int = 5) -> dict:
 
     return team_info
 
-def compute_elo_ratings(k:int = 32,  initial: float = 15000.0) -> dict:
+def elo_rating(team_rating: float, opponent_rating: float, actual: float, k:int = 32) -> float:
+    """Given team and opponent current ratings, team's old rating, and actual score, compute team's new elo rating"""
+    
+    expected = 1 / (1 + 10**((opponent_rating - team_rating)/400))
+    new_rating = team_rating + k * (actual - expected)
+
+    return new_rating
+
+
+def compute_elo_ratings(k:int = 32,  initial: float = 1500.0) -> dict:
     """
     Process all matches in chronological order and return
     a dictionary of {team_id: current_elo} after all matches"""
+
+    conn = get_connection()
+
+    ratings = {} # running elos
+    snapshots = {} # teams' ratings before the match was played / {match_id : {home_elo: float, away_elo: float}}
     
+    # gather all matches 
+    matches = conn.execute("""
+                SELECT match_id, home_team_id, away_team_id, result
+                FROM matches
+                ORDER BY date
+                """).fetchall()
+    
+    for match in matches:
+        home_team_id = match["home_team_id"]
+        away_team_id = match["away_team_id"]
+        result = match["result"]
+        match_id = match["match_id"]
+
+        # elos going into a match
+        home_elo = ratings.get(home_team_id, 1500.0)
+        away_elo = ratings.get(away_team_id, 1500.0)
+
+        snapshots[match_id] = {"home_elo": home_elo, 
+                               "away_elo": away_elo}
+        
+        if result == "draw": #draw
+            home_actual = 0.5
+            away_actual = 0.5
+        elif result == "home_win":
+            home_actual = 1
+            away_actual = 0
+        else:
+            home_actual = 0
+            away_actual = 1
+
+        # compute new elo ratings
+
+        new_home_elo = elo_rating(home_elo, away_elo, home_actual, k)
+
+        new_away_elo = elo_rating(away_elo, home_elo, away_actual, k)
+
+        ratings[home_team_id] = new_home_elo
+        ratings[away_team_id] = new_away_elo
+
+    return snapshots, ratings
+
 
 ## temp test
 if __name__ == "__main__":
     # Argentina is team_id 5
     result = rolling_form(5, "2022-11-20", n = 5)
     print(result)
+
+    snapshots, ratings = compute_elo_ratings()
+
+    #top 10 teams by current Elo
+    conn = get_connection()
+    top = sorted(ratings.items(), key=lambda x:x[1], reverse=True)[:10]
+
+    for team_id, elo in top:
+        row = conn.execute("SELECT name FROM teams WHERE team_id = ?", (team_id,)).fetchone()
+        if row is None: 
+            continue
+        print(f"{row["name"]}: {round(elo,1)}")
