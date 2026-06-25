@@ -30,7 +30,7 @@ def init_db():
             
             CREATE TABLE IF NOT EXISTS matches (
                 match_id        INTEGER PRIMARY KEY,
-                tournament_id   INTGER REFERENCES tournaments(tournament_id),
+                tournament_id   INTEGER REFERENCES tournaments(tournament_id),
                 date            TEXT NOT NULL,
                 home_team_id    INTEGER REFERENCES teams(team_id),
                 away_team_id    INTEGER REFERENCES teams(team_id),
@@ -38,8 +38,10 @@ def init_db():
                 away_goals      INTEGER,
                 result          TEXT,
                 stage           TEXT,
-                venue           TEXT
+                venue           TEXT,
+                elo_seed_only   INTEGER DEFAULT 0
             );
+
             CREATE UNIQUE INDEX IF NOT EXISTS idx_matches_unique
                 ON matches(date, home_team_id, away_team_id);
                            

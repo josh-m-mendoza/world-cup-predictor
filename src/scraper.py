@@ -144,7 +144,7 @@ def get_world_cup_year(match_date: str, tournament_name: str) -> int:
         
     return current_wc
 
-def load_historical_csv(filepath: str, from_year: int = 2010):
+def load_historical_csv(filepath: str, from_year: int = 2010, to_year: int = None, elo_seed_only: bool = False):
     """
     Load internation results fromo CSV into the DB
     filters to matches from from_year onwards by default"""
@@ -160,6 +160,9 @@ def load_historical_csv(filepath: str, from_year: int = 2010):
             for row in reader:
                 year = int(row["date"][:4])
                 if year < from_year:
+                    continue
+
+                if to_year and year >= to_year:
                     continue
 
                 # only keep World Cup matches for now
@@ -203,14 +206,17 @@ def load_historical_csv(filepath: str, from_year: int = 2010):
                 away_id = conn.execute("SELECT team_id FROM teams WHERE name = ?", (away_name,)).fetchone()["team_id"]
 
                 wc_year = get_world_cup_year(row["date"], row["tournament"])
-                tournament_id = get_or_create_tournament(conn, row["tournament"], wc_year)
+                if elo_seed_only:
+                    tournament_id = get_or_create_tournament(conn, "Elo Seed Data", wc_year)
+                else:
+                    tournament_id = get_or_create_tournament(conn, row["tournament"], wc_year)
 
                 try:
                     conn.execute("""
                         INSERT OR IGNORE INTO matches
                             (tournament_id, date, home_team_id, away_team_id,
-                            home_goals, away_goals, result, stage)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            home_goals, away_goals, result, stage, elo_seed_only)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?,?)
                     """, (
                         tournament_id,
                         row["date"],
@@ -220,6 +226,7 @@ def load_historical_csv(filepath: str, from_year: int = 2010):
                         away_goals,
                         result,
                         row["tournament"],
+                        1 if elo_seed_only else 0,
                     ))
                     inserted += 1
                 except sqlite3.IntegrityError:
@@ -230,6 +237,9 @@ def load_historical_csv(filepath: str, from_year: int = 2010):
 if __name__ == "__main__":
     from src.db import init_db
     init_db()
+
+    print("--- Loading Elo seed data (1990-2009) ---")
+    load_historical_csv("data/raw/results.csv", from_year=1990, to_year=2010, elo_seed_only=True)
 
     print("--- Loading historical CSV ---")
     load_historical_csv("data/raw/results.csv", from_year=2010)
